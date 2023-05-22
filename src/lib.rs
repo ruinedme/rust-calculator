@@ -4,15 +4,13 @@ enum Token<T> {
     Operator(OP),
 }
 
-#[derive(Debug)]
-#[derive(PartialEq)]
+#[derive(Debug,PartialEq)]
 enum OpAssocation {
     LEFT,
     RIGHT,
 }
 
-#[derive(Debug)]
-#[derive(PartialEq)]
+#[derive(Debug,PartialEq)]
 enum OPSymbol {
     ADD,
     SUB,
@@ -105,18 +103,26 @@ pub fn to_result(input: String) -> Option<f64> {
     let mut index = 0;
     let mut offset = 0;
     let mut prev_val = '`';
+    //token vector that will be passed to obtain final f64 result
     let mut tokens: Vec<Token<f64>> = Vec::new();
     let mut op_stack: Vec<OP> = Vec::new();
 
     for c in char_iter {
-        //handle unary - at beginning of expression
+        //handle unary negative operator
+        //Better way to hanlde this?
         if (c.is_ascii_digit() || c == '.') || (index == 0 && c == '-') || (c == '-' && !prev_val.is_ascii_digit() && prev_val != '`') {
             index+=1;
             continue;
         } else {
             //found number boundry
             if offset != index {
-                tokens.push(Token::Number(trimmed_input[offset..index].parse().unwrap()));
+                tokens.push(Token::Number(match trimmed_input[offset..index].parse() {
+                    Ok(x) => x,
+                    Err(_) => {
+                        println!("Found Symbol, Expected Number");
+                        return None
+                    }
+                }));
             }            
             //convert char to OpSymbol
             let op1 = match OPSymbol::value(c) {
@@ -181,9 +187,17 @@ pub fn to_result(input: String) -> Option<f64> {
         prev_val = c;
         index+=1;
         offset = index;
-    }   
+    }
+    //if end of input was not a ) or some other symbol offset to end of input must be a number. Push this number to output vector
     if offset < trimmed_input.len() {
-        tokens.push(Token::Number(trimmed_input[offset..].parse().unwrap()));
+        tokens.push(Token::Number(match trimmed_input[offset..].parse() {
+            Ok(x) => x,
+            Err(_) => {
+                println!("Found Symbol, Expected Number");
+                return None
+            }
+
+        }));
     }
     //finsished iterating over string push remaining op symbols on to output
     if op_stack.len() > 0 {
@@ -202,6 +216,7 @@ pub fn to_result(input: String) -> Option<f64> {
         }
     }
     //missing symbol
+    //probably breaks if unary symbols are ever implemented like !5
     if tokens.len() % 2 == 0 {
         println!("Invalid Expression");
         return None
@@ -209,6 +224,7 @@ pub fn to_result(input: String) -> Option<f64> {
     get_result(tokens)
 }
 
+/// Convert vector of Tokens to a final result as a f64 number
 fn get_result(mut tokens: Vec<Token<f64>>) -> Option<f64> {
     let mut index = 0;
     while tokens.len() > 1 {
@@ -245,6 +261,7 @@ fn get_result(mut tokens: Vec<Token<f64>>) -> Option<f64> {
             }
             
         }//end for
+        
         //can't borrow immutable and mutable in same scope so need to update tokens outside for loop
         //update tokens
         tokens.remove(index);
