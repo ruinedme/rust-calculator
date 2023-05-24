@@ -1,8 +1,5 @@
 use calculator;
-use std::{
-    io::{self},
-    process::exit,
-};
+use std::io::{self};
 
 fn main() {
     loop {
@@ -10,15 +7,13 @@ fn main() {
         io::stdin()
             .read_line(&mut user_input)
             .expect("Unable to read stdin");
-        if user_input.trim().eq_ignore_ascii_case("quit")
-            || user_input.trim().eq_ignore_ascii_case("q")
-        {
-            break;
+        let trimmed_input = user_input.trim();
+        if trimmed_input.eq_ignore_ascii_case("quit") || trimmed_input.eq_ignore_ascii_case("q") {
+            return;
         }
-        //intentionally pass ownership of user_input since we don't want to use the raw input
-        if let Some(result) = calculator::to_result(user_input) {
-            println!("{:?}", result);
+        match calculator::parse(trimmed_input) {
+            Ok(x) => println!("{x}"),
+            Err(e) => eprintln!("{e}"),
         }
     }
-    exit(0);
 }
