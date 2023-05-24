@@ -1,7 +1,7 @@
 #[derive(Debug, Clone, Copy)]
 enum Token<T> {
     Number(T),
-    Operator(OP),
+    Operator(OPSymbol),
 }
 
 #[derive(Debug, PartialEq, Clone, Copy)]
@@ -23,44 +23,35 @@ enum OPSymbol {
 
 impl OPSymbol {
     //Convert char to OP
-    fn value(c: char) -> Option<OP> {
+    fn value(c: char) -> Option<OPSymbol> {
+        use OPSymbol::*;
         match c {
-            '+' => Some(OP {
-                op_symbol: OPSymbol::ADD,
-                precedence: 2,
-                op_association: OpAssocation::LEFT,
-            }),
-            '-' => Some(OP {
-                op_symbol: OPSymbol::SUB,
-                precedence: 2,
-                op_association: OpAssocation::LEFT,
-            }),
-            '*' => Some(OP {
-                op_symbol: OPSymbol::MUL,
-                precedence: 3,
-                op_association: OpAssocation::LEFT,
-            }),
-            '/' => Some(OP {
-                op_symbol: OPSymbol::DIV,
-                precedence: 3,
-                op_association: OpAssocation::LEFT,
-            }),
-            '^' => Some(OP {
-                op_symbol: OPSymbol::EXP,
-                precedence: 4,
-                op_association: OpAssocation::RIGHT,
-            }),
-            '(' => Some(OP {
-                op_symbol: OPSymbol::LeftParen,
-                precedence: 0,
-                op_association: OpAssocation::RIGHT,
-            }),
-            ')' => Some(OP {
-                op_symbol: OPSymbol::RightParen,
-                precedence: 0,
-                op_association: OpAssocation::RIGHT,
-            }),
+            '+' => Some(ADD),
+            '-' => Some(SUB),
+            '*' => Some(MUL),
+            '/' => Some(DIV),
+            '^' => Some(EXP),
+            '(' => Some(LeftParen),
+            ')' => Some(RightParen),
             _ => None,
+        }
+    }
+
+    fn get_precedence(self) -> u8 {
+        use OPSymbol::*;
+        match self {
+            ADD | SUB => 2,
+            MUL | DIV => 3,
+            EXP => 4,
+            LeftParen | RightParen => 0,
+        }
+    }
+
+    fn get_association(self) -> OpAssocation {
+        use OPSymbol::*;
+        match self {
+            ADD | SUB | MUL | DIV => OpAssocation::LEFT,
+            EXP | LeftParen | RightParen => OpAssocation::RIGHT,
         }
     }
 
@@ -84,13 +75,6 @@ impl OPSymbol {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
-struct OP {
-    op_symbol: OPSymbol,
-    precedence: u8,
-    op_association: OpAssocation,
-}
-
 /// Parses a given expression string and returns a result as an f64
 /// If any parsing/calculation errors occur returns None
 /// Uses the shunting yard algorithm to parse the inputs into reverse polish notation
@@ -109,6 +93,7 @@ struct OP {
 /// assert_eq!(result, 32.0);
 /// ```
 pub fn parse(input: &str) -> Result<f64, &str> {
+    use OPSymbol::*;
     //immedieatly die if we find alpha characters
     if input.contains(|c: char| c.is_ascii_alphabetic()) {
         return Err("Found Invalid Input!");
@@ -129,7 +114,7 @@ pub fn parse(input: &str) -> Result<f64, &str> {
     let mut prev_val = '`';
     //token vector that will be passed to obtain final f64 result
     let mut tokens: Vec<Token<f64>> = Vec::new();
-    let mut op_stack: Vec<OP> = Vec::new();
+    let mut op_stack: Vec<OPSymbol> = Vec::new();
 
     for c in char_iter {
         //handle unary negative operator
@@ -159,14 +144,14 @@ pub fn parse(input: &str) -> Result<f64, &str> {
             };
             //process logic for for op token
             //unconditionally add ( to the opstack
-            if op1.op_symbol == OPSymbol::LeftParen {
+            if op1 == OPSymbol::LeftParen {
                 op_stack.push(op1);
             //hanlde )
-            } else if op1.op_symbol == OPSymbol::RightParen && op_stack.len() > 0 {
+            } else if op1 == RightParen && op_stack.len() > 0 {
                 //pop opstack until ( is found
                 while op_stack.len() > 0 {
                     let op2 = &op_stack[op_stack.len() - 1];
-                    if op2.op_symbol != OPSymbol::LeftParen {
+                    if *op2 != LeftParen {
                         tokens.push(Token::Operator(match op_stack.pop() {
                             Some(x) => x,
                             None => {
@@ -191,10 +176,10 @@ pub fn parse(input: &str) -> Result<f64, &str> {
                 } else {
                     while op_stack.len() > 0 {
                         let op2 = &op_stack[op_stack.len() - 1];
-                        if op2.op_symbol != OPSymbol::LeftParen
-                            && (op2.precedence > op1.precedence
-                                || (op1.precedence == op2.precedence
-                                    && op1.op_association == OpAssocation::LEFT))
+                        if *op2 != LeftParen
+                            && (op2.get_precedence() > op1.get_precedence()
+                                || (op1.get_precedence() == op2.get_precedence()
+                                    && op1.get_association() == OpAssocation::LEFT))
                         {
                             tokens.push(Token::Operator(match op_stack.pop() {
                                 Some(x) => x,
@@ -229,7 +214,7 @@ pub fn parse(input: &str) -> Result<f64, &str> {
         while op_stack.len() > 0 {
             tokens.push(Token::Operator(match op_stack.pop() {
                 Some(x) => {
-                    if x.op_symbol == OPSymbol::LeftParen {
+                    if x == LeftParen {
                         return Err("Found unclosed (");
                     } else {
                         x
@@ -249,7 +234,6 @@ pub fn parse(input: &str) -> Result<f64, &str> {
 // Convert vector of Tokens to a final result as a f64 number
 fn get_result(mut tokens: Vec<Token<f64>>) -> Result<f64, &'static str> {
     use Token::{Number, Operator};
-
     loop {
         let n = tokens.len();
         if n == 0 {
@@ -266,7 +250,7 @@ fn get_result(mut tokens: Vec<Token<f64>>) -> Result<f64, &'static str> {
                 if let Operator(_op) = &tokens[index] {
                     //Take the 2 Numbers precedding the symbol and evaluate
                     if let [Number(a), Number(b), Operator(op)] = tokens[index - 2..=index] {
-                        match OPSymbol::eval(a, b, &op.op_symbol) {
+                        match OPSymbol::eval(a, b, &op) {
                             Ok(c) => {
                                 temp_result = c;
                                 break;
