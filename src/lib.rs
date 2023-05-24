@@ -150,8 +150,8 @@ pub fn parse(input: &str) -> Result<f64, &str> {
             } else if op1 == RightParen && op_stack.len() > 0 {
                 //pop opstack until ( is found
                 while op_stack.len() > 0 {
-                    let op2 = &op_stack[op_stack.len() - 1];
-                    if *op2 != LeftParen {
+                    let op2 = op_stack[op_stack.len() - 1];
+                    if op2 != LeftParen {
                         tokens.push(Token::Operator(match op_stack.pop() {
                             Some(x) => x,
                             None => {
@@ -175,8 +175,8 @@ pub fn parse(input: &str) -> Result<f64, &str> {
                     op_stack.push(op1);
                 } else {
                     while op_stack.len() > 0 {
-                        let op2 = &op_stack[op_stack.len() - 1];
-                        if *op2 != LeftParen
+                        let op2 = op_stack[op_stack.len() - 1];
+                        if op2 != LeftParen
                             && (op2.get_precedence() > op1.get_precedence()
                                 || (op1.get_precedence() == op2.get_precedence()
                                     && op1.get_association() == OpAssocation::LEFT))
