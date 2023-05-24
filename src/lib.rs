@@ -1,16 +1,16 @@
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 enum Token<T> {
     Number(T),
     Operator(OP),
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone, Copy)]
 enum OpAssocation {
     LEFT,
     RIGHT,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone, Copy)]
 enum OPSymbol {
     ADD,
     SUB,
@@ -65,29 +65,26 @@ impl OPSymbol {
     }
 
     //evaluate OpSymbol and perform operation
-    fn eval(i1: f64, i2: f64, op: &OPSymbol) -> Option<f64> {
+    fn eval(i1: f64, i2: f64, op: &OPSymbol) -> Result<Token<f64>, &'static str> {
+        use Token::Number;
         match op {
-            OPSymbol::ADD => Some(i1 + i2),
-            OPSymbol::SUB => Some(i1 - i2),
-            OPSymbol::MUL => Some(i1 * i2),
+            OPSymbol::ADD => Ok(Number(i1 + i2)),
+            OPSymbol::SUB => Ok(Number(i1 - i2)),
+            OPSymbol::MUL => Ok(Number(i1 * i2)),
             OPSymbol::DIV => {
                 if i2 == 0.0 {
-                    println!("Can't divide by 0!");
-                    return None;
+                    return Err("Can't divide by 0!");
                 } else {
-                    Some(i1 / i2)
+                    Ok(Number(i1 / i2))
                 }
             }
-            OPSymbol::EXP => Some(i1.powf(i2)),
-            _ => {
-                println!("Can't evaluate invalid symbol");
-                None
-            }
+            OPSymbol::EXP => Ok(Number(i1.powf(i2))),
+            _ => Err("Can't evaluate invalid symbol"),
         }
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 struct OP {
     op_symbol: OPSymbol,
     precedence: u8,
@@ -99,23 +96,22 @@ struct OP {
 /// Uses the shunting yard algorithm to parse the inputs into reverse polish notation
 /// Handles basic Addition, Subtraction, Multiplication, Division, Exponents, the unary - operator
 /// ```
-/// let result = match calculator::to_result(String::from("2+2")) {
-///   Some(x) => x,
-///   None => panic!("Test Failed")
+/// let result = match calculator::parse("2+2") {
+///   Ok(x) => x,
+///   Err(e) => panic!("{e}")
 /// };
 /// assert_eq!(result, 4.0);
 ///
-/// let result = match calculator::to_result(String::from("2*(1+3)^2")) {
-///   Some(x) => x,
-///   None => panic!("Test Failed")
+/// let result = match calculator::parse("2*(1+3)^2") {
+///   Ok(x) => x,
+///   Err(e) => panic!("{e}")
 /// };
 /// assert_eq!(result, 32.0);
 /// ```
-pub fn to_result(input: String) -> Option<f64> {
+pub fn parse(input: &str) -> Result<f64, &str> {
     //immedieatly die if we find alpha characters
     if input.contains(|c: char| c.is_ascii_alphabetic()) {
-        println!("Found Invalid Input!");
-        return None;
+        return Err("Found Invalid Input!");
     }
 
     //get rid of spaces
@@ -150,8 +146,7 @@ pub fn to_result(input: String) -> Option<f64> {
                 tokens.push(Token::Number(match trimmed_input[offset..index].parse() {
                     Ok(x) => x,
                     Err(_) => {
-                        println!("Found Symbol, Expected Number");
-                        return None;
+                        return Err("Found Symbol, Expected Number");
                     }
                 }));
             }
@@ -159,8 +154,7 @@ pub fn to_result(input: String) -> Option<f64> {
             let op1 = match OPSymbol::value(c) {
                 Some(x) => x,
                 None => {
-                    println!("Found invalid symbol");
-                    return None;
+                    return Err("Found invalid symbol");
                 }
             };
             //process logic for for op token
@@ -176,8 +170,7 @@ pub fn to_result(input: String) -> Option<f64> {
                         tokens.push(Token::Operator(match op_stack.pop() {
                             Some(x) => x,
                             None => {
-                                println!("Found invalider OP token");
-                                return None;
+                                return Err("Found invalider OP token");
                             }
                         }));
                     } else {
@@ -187,8 +180,7 @@ pub fn to_result(input: String) -> Option<f64> {
                     }
                     //found a ) but no matching (
                     if op_stack.len() == 0 {
-                        println!("Found mismatched ()");
-                        return None;
+                        return Err("Found mismatched ()");
                     }
                 }
             //handle other operators
@@ -207,8 +199,7 @@ pub fn to_result(input: String) -> Option<f64> {
                             tokens.push(Token::Operator(match op_stack.pop() {
                                 Some(x) => x,
                                 None => {
-                                    println!("Failed to push operator to token output");
-                                    return None;
+                                    return Err("Failed to push operator to token output");
                                 }
                             }));
                         } else {
@@ -227,9 +218,9 @@ pub fn to_result(input: String) -> Option<f64> {
     if offset < trimmed_input.len() {
         tokens.push(Token::Number(match trimmed_input[offset..].parse() {
             Ok(x) => x,
-            Err(_) => {
-                println!("Found Symbol, Expected Number");
-                return None;
+            Err(e) => {
+                eprintln!("{e}");
+                return Err("Failed to parse number");
             }
         }));
     }
@@ -239,8 +230,7 @@ pub fn to_result(input: String) -> Option<f64> {
             tokens.push(Token::Operator(match op_stack.pop() {
                 Some(x) => {
                     if x.op_symbol == OPSymbol::LeftParen {
-                        println!("Found unclosed (");
-                        return None;
+                        return Err("Found unclosed (");
                     } else {
                         x
                     }
@@ -249,65 +239,49 @@ pub fn to_result(input: String) -> Option<f64> {
             }));
         }
     }
-    //missing symbol
-    //probably breaks if unary symbols are ever implemented like !5
-    if tokens.len() % 2 == 0 {
-        println!("Invalid Expression");
-        return None;
+
+    match get_result(tokens) {
+        Ok(x) => Ok(x),
+        Err(e) => Err(e),
     }
-    get_result(tokens)
 }
 
-/// Convert vector of Tokens to a final result as a f64 number
-fn get_result(mut tokens: Vec<Token<f64>>) -> Option<f64> {
-    let mut index = 0;
-    while tokens.len() > 1 {
-        //temp result
-        let mut r: Token<f64> = Token::Number(0.0);
-        for t in &tokens {
-            match t {
-                Token::Number(_x) => {
-                    index += 1;
-                    continue;
-                }
-                Token::Operator(x) => {
-                    let i1 = match tokens[index - 2] {
-                        Token::Number(n) => n,
-                        _ => {
-                            println!("Found OPSymbol, expected Number");
-                            return None;
-                        }
-                    };
-                    let i2 = match tokens[index - 1] {
-                        Token::Number(n) => n,
-                        _ => {
-                            println!("Found OpSymbol, expected Number");
-                            return None;
-                        }
-                    };
-                    r = Token::Number(match OPSymbol::eval(i1, i2, &x.op_symbol) {
-                        Some(x) => x,
-                        _ => return None,
-                    });
-                    break;
-                }
-            }
-        } //end for
+// Convert vector of Tokens to a final result as a f64 number
+fn get_result(mut tokens: Vec<Token<f64>>) -> Result<f64, &'static str> {
+    use Token::{Number, Operator};
 
-        //can't borrow immutable and mutable in same scope so need to update tokens outside for loop
-        //update tokens
-        tokens.remove(index);
-        tokens.remove(index - 1);
-        tokens.remove(index - 2);
-        tokens.insert(index - 2, r);
-        //reset for next loop
-        index = 0;
-    } //end while
-    match tokens[0] {
-        Token::Number(x) => Some(x),
-        _ => {
-            println!("Expected Number, found Symbol");
-            return None;
+    loop {
+        let n = tokens.len();
+        if n == 0 {
+            return Err("");
+        } else if let [Number(a)] = tokens[..] {
+            return Ok(a);
+        } else if n < 3 {
+            return Err("Syntax Error");
+        } else {
+            let mut index = 0;
+            let mut temp_result: Token<f64> = Number(0.0);
+            for _t in &tokens {
+                //find first instance of an OP symbol
+                if let Operator(_op) = &tokens[index] {
+                    //Take the 2 Numbers precedding the symbol and evaluate
+                    if let [Number(a), Number(b), Operator(op)] = tokens[index - 2..=index] {
+                        match OPSymbol::eval(a, b, &op.op_symbol) {
+                            Ok(c) => {
+                                temp_result = c;
+                                break;
+                            }
+                            Err(e) => {
+                                return Err(e);
+                            }
+                        }
+                    }
+                }
+                index += 1;
+            }
+            //replace evaluated tokens with intermediate result
+            let t: Vec<Token<f64>> = Vec::from([temp_result]);
+            tokens.splice(index - 2..=index, t);
         }
     }
 }
